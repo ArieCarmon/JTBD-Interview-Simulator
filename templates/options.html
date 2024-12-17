@@ -142,19 +142,13 @@
         }
 
         function startInterview() {
-            if (!document.getElementById('start-button').disabled) {
-                console.log("Start button clicked.");
-                console.log("Selected mode:", selectedMode);
-                console.log("Business domain:", document.getElementById('business-domain').value);
+            const businessDomain = document.getElementById('business-domain').value;
+            const mode = selectedMode; // Retrieve mode already stored
 
-                const businessDomain = document.getElementById('business-domain').value;
-
-                // Redirect to the interview page with the selected mode
-                if (selectedMode && businessDomain) {
-                    window.location.href = `/interview?mode=${encodeURIComponent(selectedMode)}`;
-                } else {
-                    alert("Both options must be selected.");
-                }
+            if (businessDomain && mode) {
+                window.location.href = `/interview?mode=${encodeURIComponent(mode)}&business_domain=${encodeURIComponent(businessDomain)}`;
+            } else {
+                alert("Both options must be selected.");
             }
         }
 

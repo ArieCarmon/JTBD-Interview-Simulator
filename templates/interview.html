@@ -57,11 +57,12 @@
             color: white;
         }
 
-        .chat-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
+        .chat-window {
+            overflow-y: auto; /* Enable scrolling */
+            height: calc(100vh - 250px); /* Reduce height to leave space for input box */
+            padding: 10px;
             background: #fff;
+            box-sizing: border-box; /* Include padding in height */
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -77,25 +78,31 @@
         .user-message {
             background: #a0c4ff;
             text-align: left;
-            margin-left: 20%;
+            margin-left: 2in;
             max-width: 70%;
         }
 
         .assistant-message {
             background: #d8f3dc;
             text-align: left;
-            margin-right: 20%;
+            margin-left: 1in;
             max-width: 70%;
         }
 
         .input-container {
+            position: fixed; /* Fix the container to the bottom of the screen */
+            bottom: 0;       /* Align to the bottom */
+            left: 0;
+            width: 100%;     /* Span the full width */
             display: flex;
             padding: 10px;
             background: #eee;
+            border-top: 1px solid #ccc; /* Add a subtle border for separation */
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow for style */
         }
 
         .input-container input {
-            flex: 1;
+            flex: 1; /* Allow input to grow and take available space */
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
@@ -112,6 +119,7 @@
             font-size: 16px;
             cursor: pointer;
         }
+
 
         .modal {
             display: none;
@@ -158,10 +166,21 @@
         <!-- Header Section -->
         <div class="header">
             <h2>JTBD Interview</h2>
-            <h3>Questions Counter: {{ counter }}</h3>
+            <h3 style="margin: 0;">
+                Questions Counter: {{ counter }}
+                {% if mode == 'Full Interview Mode' %}
+                    /{{ maxQuestions }}
+                {% endif %}
+            </h3>
             <div id="timer" style="display: none; color: green; font-size: 16px;">
                 Time Elapsed: <span id="minutes">0</span> minutes
             </div>
+            {% if mode == 'Full Interview Mode' and counter >= maxQuestions %}
+                <div style="color: red; font-size: 14px; text-align: right; max-width: 300px; line-height: 1.5;">
+                    You reached the maximum number of questions. <br>
+                    Go to the interview analysis by clicking the <b>"Finish Interview"</b> button.
+                </div>
+            {% endif %}
             <!-- Guided Mode Features -->
             <div id="guided-features" style="display: none; margin-top: 10px;">
                 <div id="notification" style="color: red; font-size: 14px;">
@@ -178,9 +197,9 @@
         </div>
 
         <!-- Chat Window -->
-        <div class="chat-container" id="chat-window">
+        <div id="chat-window" class="chat-window">
             {% for message in conversation %}
-                <div class="message {{ 'assistant-message' if message.role == 'assistant' else 'user-message' }}">
+                <div class="chat-message {% if message.role == 'user' %}user-message{% else %}assistant-message{% endif %}">
                     {{ message.content }}
                 </div>
             {% endfor %}
@@ -189,9 +208,15 @@
         <!-- Input Section -->
         <form method="POST" class="input-container">
             <input type="hidden" name="mode" value="{{ mode }}">
-            <input type="text" name="user_input" placeholder="Type your question..." required>
-            <button type="submit">Send</button>
+            {% if mode == 'Full Interview Mode' and counter >= maxQuestions %}
+                <input type="text" name="user_input" placeholder="Type your question..." disabled>
+                <button type="submit" disabled>Send</button>
+            {% else %}
+                <input type="text" name="user_input" placeholder="Type your question..." required>
+                <button type="submit">Send</button>
+            {% endif %}
         </form>
+
     </div>
 
     <!-- Modals -->
@@ -245,14 +270,42 @@
             document.getElementById('guided-features').style.display = 'block';
         }
 
-        // Auto-scroll to the bottom of the chat window
-        function scrollToBottom() {
-            const chatWindow = document.getElementById('chat-window');
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        }
+        // Run the script after the DOM is fully loaded
+        document.addEventListener("DOMContentLoaded", function () {
+            const chatWindow = document.querySelector('.chat-window'); // Correctly select chat-window
 
-        // Call this function on page load
-        window.onload = scrollToBottom;
+            // Auto-scroll to the bottom of the chat window
+            function scrollToBottom() {
+                if (chatWindow) {
+                    requestAnimationFrame(() => {
+                        // Force re-check of the height and scroll
+                        chatWindow.scrollTop = chatWindow.scrollHeight;
+                        console.log("Auto-scroll triggered. Height:", chatWindow.scrollHeight);
+                    });
+                } else {
+                    console.log("Chat window not found!");
+                }
+            }
+
+            // Scroll to the bottom on page load
+            scrollToBottom();
+
+            // Scroll after form submission
+            const form = document.querySelector('form');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    setTimeout(scrollToBottom, 200); // Ensure rendering completes
+                });
+            }
+
+            // Observe changes in the chat window to trigger scrolling
+            if (chatWindow) {
+                const observer = new MutationObserver(() => {
+                    scrollToBottom(); // Ensure we scroll after every DOM update
+                });
+                observer.observe(chatWindow, { childList: true });
+            }
+        });
 
         function startTimer() {
             // Display the timer
@@ -297,6 +350,8 @@
         if ("{{ mode }}" === "Guided Interview Mode") {
             updateToggleButton();
         }
+
+        // Existing scripts or other JavaScript code
 
     </script>
 </body>
