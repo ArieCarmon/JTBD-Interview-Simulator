@@ -112,7 +112,7 @@
     </div>
 
     <div class="section">
-        <button id="start-button" type="submit" disabled>Complete Selection to Start</button>
+        <button id="start-button" type="button" onclick="startInterview()" disabled>Complete Selection to Start</button>
     </div>
 
     <script>
@@ -140,6 +140,24 @@
                 startButton.textContent = "Complete Selection to Start";
             }
         }
+
+        function startInterview() {
+            if (!document.getElementById('start-button').disabled) {
+                console.log("Start button clicked.");
+                console.log("Selected mode:", selectedMode);
+                console.log("Business domain:", document.getElementById('business-domain').value);
+
+                const businessDomain = document.getElementById('business-domain').value;
+
+                // Redirect to the interview page with the selected mode
+                if (selectedMode && businessDomain) {
+                    window.location.href = `/interview?mode=${encodeURIComponent(selectedMode)}`;
+                } else {
+                    alert("Both options must be selected.");
+                }
+            }
+        }
+
     </script>
 </body>
 </html>

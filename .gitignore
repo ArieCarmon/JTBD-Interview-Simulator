@@ -9,3 +9,4 @@ __pycache__/
 # Ignore system files (optional)
 .DS_Store
 Thumbs.db
+.env
