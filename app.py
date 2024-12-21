@@ -4,8 +4,9 @@ import os
 import openai
 import threading
 import time
+from datetime import datetime
 
-app = Flask(__name__)
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -16,32 +17,13 @@ maxQuestions = 20  # Set to 5 for testing; change to 30 later
 # Access the OpenAI API Key
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-## Home route
-@app.route('/')
-def home():
-    # Retrieve the API key
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-    # Log the partial API key to the console for testing
-    if OPENAI_API_KEY:
-        print(f"Your API key is: {OPENAI_API_KEY[:4]}... (hidden)")
-    else:
-        print("API key not found.")
-
-    # Render your existing welcome.html page
-    return render_template('welcome.html')
-
-## Options selection route
-@app.route('/mode')
-def options():
-    return render_template('options.html')
-
 # Global variables
 questions_counter = 0
 conversation = []
-interview_timer = 0
+timer = 0  # Active timer during the interview
+duration = 0  # Total duration of the interview
+timer_active = False # Controls whether the timer is running
 
-## Interview route
 # Define personas for each business domain
 personas = {
     "Airline Operations": {
@@ -63,9 +45,47 @@ personas = {
     }
 }
 
+# Background Timer Function
+def background_timer():
+    global timer, timer_active
+    while True:
+        if timer_active:
+            time.sleep(60)  # Increment every minute
+            if not timer_active:  # Check if the timer was deactivated during the wait
+                break
+            timer += 1
+            print(f"Timer Active: {timer_active}, Timer: {timer} minutes")
+
+# Initialize Flask App
+app = Flask(__name__)
+
+# Start Background Timer Loop
+threading.Thread(target=background_timer, daemon=True).start()
+
+# Home route
+@app.route('/')
+def home():
+    # Retrieve the API key
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+    # Log the partial API key to the console for testing
+    if OPENAI_API_KEY:
+        print(f"Your API key is: {OPENAI_API_KEY[:4]}... (hidden)")
+    else:
+        print("API key not found.")
+
+    # Render your existing welcome.html page
+    return render_template('welcome.html')
+
+# Options selection route
+@app.route('/mode')
+def options():
+    return render_template('options.html')
+
+# Interview route
 @app.route('/interview', methods=['GET', 'POST'])
 def interview():
-    global questions_counter, conversation, interview_timer
+    global questions_counter, conversation, timer, duration, timer_active
 
     # Get mode and business domain
     mode = request.args.get('mode') or request.form.get('mode', 'Full Interview Mode')
@@ -74,6 +94,13 @@ def interview():
 
     # Load persona details based on business domain
     persona = personas.get(business_domain, {})
+
+    def increment_timer():
+        global timer
+        while True:
+            time.sleep(60)  # Increment every minute
+            timer += 1
+            print(f"Timer: {timer} minutes")  # Debugging log
 
     if request.method == 'GET':
         if resume and mode == 'Guided Interview Mode':
@@ -88,7 +115,10 @@ def interview():
             )
             conversation = [{"role": "assistant", "content": opening_message}]
             questions_counter = 0
-            interview_timer = 0  # Initialize timer for new session
+            timer = 0  # Reset timer for new session
+            duration = 0  # Reset duration for new session
+
+        timer_active = True  # Start the timer
 
         # Render the interview screen for GET requests
         return render_template(
@@ -97,14 +127,15 @@ def interview():
             counter=questions_counter,
             mode=mode,
             maxQuestions=maxQuestions,
-            persona=persona
+            persona=persona,
+            timer = timer
         )
 
     elif request.method == 'POST':
         user_input = request.form['user_input']
-        timer_value = int(request.form.get('timer', 0))  # Retrieve timer from the form
-        interview_timer = timer_value  # Update global timer
-
+        business_domain = request.args.get('business_domain') or request.form.get('business_domain',
+                                                                                  'Airline Operations')
+        persona = personas.get(business_domain, {})  # Reload persona details
         conversation.append({"role": "user", "content": user_input})
 
         # Prepare the GPT-4 prompt
@@ -141,24 +172,45 @@ def interview():
             counter=questions_counter,
             mode=mode,
             maxQuestions=maxQuestions,
-            persona=persona
+            persona=persona,
+            timer=timer
         )
 
+# Evaluation route
 @app.route('/evaluation', methods=['GET'])
 def evaluation():
-    global questions_counter, conversation, interview_timer
+    global questions_counter, conversation, timer, duration, timer_active
 
-    # Get the mode
     mode = request.args.get('mode', 'Full Interview Mode')
+    duration_to_display = timer if mode == 'Guided Interview Mode' else duration
 
-    # Pass counters and data to the template
+    print(f"Time passed to evaluation: {duration_to_display} minutes")  # Debugging log
+
     return render_template(
         'evaluation.html',
         mode=mode,
         conversation=conversation,
         counter=questions_counter,
-        duration=interview_timer  # Pass the timer value to the template
+        duration=duration_to_display  # Pass appropriate value
     )
+
+
+@app.route('/stop_timer', methods=['POST'])
+def stop_timer():
+    global timer, duration, timer_active
+
+    # Capture the final duration
+    duration = timer
+    print(f"Final duration: {duration} minutes")
+
+    # Reset the timer
+    timer = 0
+
+    timer_active = False  # Stop the timer
+    print(f"Final duration: {duration} minutes")
+    print(f"Timer Active: {timer_active}, Timer: {timer} minutes")
+    print("Timer reset and thread cleared.")
+    return '', 204  # No content response
 
 
 if __name__ == '__main__':

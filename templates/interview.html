@@ -172,8 +172,8 @@
                     /{{ maxQuestions }}
                 {% endif %}
             </h3>
-            <div id="timer" style="display: none; color: green; font-size: 16px;">
-                Time Elapsed: <span id="minutes">0</span> minutes
+            <div id="timer" style="color: green; font-size: 16px;">
+                Time Elapsed: {{ timer }} minutes
             </div>
             {% if mode == 'Full Interview Mode' and counter >= maxQuestions %}
                 <div style="color: red; font-size: 14px; text-align: right; max-width: 300px; line-height: 1.5;">
@@ -208,7 +208,6 @@
         <!-- Input Section -->
         <form method="POST" class="input-container">
             <input type="hidden" name="mode" value="{{ mode }}">
-            <input type="hidden" name="timer" id="timer-hidden" value="0"> <!-- Hidden timer field -->
             {% if mode == 'Full Interview Mode' and counter >= maxQuestions %}
                 <input type="text" name="user_input" placeholder="Type your question..." disabled>
                 <button type="submit" disabled>Send</button>
@@ -217,7 +216,6 @@
                 <button type="submit">Send</button>
             {% endif %}
         </form>
-
     </div>
 
     <!-- Modals -->
@@ -239,131 +237,70 @@
 
     <!-- Scripts -->
     <script>
-        let minutes = parseInt(sessionStorage.getItem('timer')) || 0;
+    // Initialize the timer with the value passed from the server
+    let currentTimer = {{ timer }};
 
-        function openModal(id) {
-            document.getElementById(id).style.display = 'flex';
-        }
+    // Function to dynamically update the timer display
+    function updateTimerDisplay() {
+        currentTimer++; // Increment the timer
+        document.getElementById('timer').textContent = `Time Elapsed: ${currentTimer} minutes`;
+    }
 
-        function closeModal(id) {
-            document.getElementById(id).style.display = 'none';
-        }
+    // Update the timer every minute
+    setInterval(updateTimerDisplay, 60000); // 60000 milliseconds = 1 minute
 
-        function startNewInterview() {
-            window.location.href = '/mode'; // Redirect to start a new interview
-        }
+    function openModal(id) {
+        document.getElementById(id).style.display = 'flex';
+    }
 
-        function showProgressEvaluation() {
-            const mode = "{{ mode }}";
-            window.location.href = `/evaluation?mode=${encodeURIComponent(mode)}`;
-        }
+    function closeModal(id) {
+        document.getElementById(id).style.display = 'none';
+    }
 
-        function finishInterview() {
-            const mode = "{{ mode }}";
-            window.location.href = `/evaluation?mode=${encodeURIComponent(mode)}`;
-        }
+    function startNewInterview() {
+        fetch('/stop_timer', { method: 'POST' }) // Call server to clear timer
+            .then(() => {
+                window.location.href = '/mode'; // Navigate to options selection screen
+            });
+    }
 
-        let mode = "{{ mode | default('Full Interview Mode', true) }}";
-        console.log("Current mode:", mode); // Check mode value in the browser console
+    function finishInterview() {
+        fetch('/stop_timer', { method: 'POST' }) // Call server to stop the timer
+            .then(() => {
+                window.location.href = '/evaluation'; // Navigate to evaluation screen
+            });
+    }
 
-        // Full Mode - Show the timer
-        if (mode === "Full Interview Mode") {
-           document.getElementById('timer').style.display = 'block';
-           startTimer();
-        }
+    // Guided Mode - Show the progress toggle button
+    if ("{{ mode }}" === "Guided Interview Mode") {
+        document.getElementById('guided-features').style.display = 'block';
+    }
 
-        // Guided Mode - Show the progress toggle button
-        if (mode === "Guided Interview Mode") {
-            document.getElementById('guided-features').style.display = 'block';
-        }
+    // Activate the toggle button after 3 Q&A pairs
+    function updateToggleButton() {
+        const toggleButton = document.getElementById('progress-toggle');
+        const notification = document.getElementById('notification');
+        const counter = parseInt("{{ counter }}");  // Q&A counter passed from Flask
 
-        // Run the script after the DOM is fully loaded
-        document.addEventListener("DOMContentLoaded", function () {
-            const chatWindow = document.querySelector('.chat-window'); // Correctly select chat-window
+        if (counter >= 3) {
+            // Activate the button
+            toggleButton.disabled = false;
+            toggleButton.style.backgroundColor = 'blue';
+            toggleButton.style.cursor = 'pointer';
+            toggleButton.style.color = 'white';
 
-            // Auto-scroll to the bottom of the chat window
-            function scrollToBottom() {
-                if (chatWindow) {
-                    requestAnimationFrame(() => {
-                        // Force re-check of the height and scroll
-                        chatWindow.scrollTop = chatWindow.scrollHeight;
-                        console.log("Auto-scroll triggered. Height:", chatWindow.scrollHeight);
-                    });
-                } else {
-                    console.log("Chat window not found!");
-                }
-            }
-
-            // Scroll to the bottom on page load
-            scrollToBottom();
-
-            // Scroll after form submission
-            const form = document.querySelector('form');
-            if (form) {
-                form.addEventListener('submit', function () {
-                    setTimeout(scrollToBottom, 200); // Ensure rendering completes
-                });
-            }
-
-            // Observe changes in the chat window to trigger scrolling
-            if (chatWindow) {
-                const observer = new MutationObserver(() => {
-                    scrollToBottom(); // Ensure we scroll after every DOM update
-                });
-                observer.observe(chatWindow, { childList: true });
-            }
-        });
-
-        function startTimer() {
-            let minutes = parseInt(sessionStorage.getItem('timer')) || 0;
-
-            // Update the timer display
-            document.getElementById('minutes').textContent = minutes;
-
-            // Increment the timer every minute
-            setInterval(() => {
-                minutes++;
-                sessionStorage.setItem('timer', minutes);
-                document.getElementById('minutes').textContent = minutes;
-
-                // Update the hidden timer field
-                document.getElementById('timer-hidden').value = minutes;
-            }, 60000); // 60000 milliseconds = 1 minute
-        }
-
-
-        // Start the timer only for Full Interview Mode
-        if ("{{ mode }}" === "Full Interview Mode") {
-            startTimer();
-        }
-
-        // Activate the toggle button after 3 Q&A pairs
-        function updateToggleButton() {
-            const toggleButton = document.getElementById('progress-toggle');
-            const notification = document.getElementById('notification');
-            const counter = parseInt("{{ counter }}");  // Q&A counter passed from Flask
-
-            if (counter >= 3) {
-                // Activate the button
-                toggleButton.disabled = false;
-                toggleButton.style.backgroundColor = 'blue';
-                toggleButton.style.cursor = 'pointer';
-                toggleButton.style.color = 'white';
-
-                // Hide the notification
-                if (notification) {
-                    notification.style.display = 'none';
-                }
+            // Hide the notification
+            if (notification) {
+                notification.style.display = 'none';
             }
         }
+    }
 
-        // Call the function only for Guided Interview Mode
-        if ("{{ mode }}" === "Guided Interview Mode") {
-            updateToggleButton();
-        }
-
-        // Existing scripts or other JavaScript code
-
-    </script>
+    // Call the function only for Guided Interview Mode
+    if ("{{ mode }}" === "Guided Interview Mode") {
+        updateToggleButton();
+    }
+</script>
 </body>
+
 </html>
