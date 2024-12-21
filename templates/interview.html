@@ -186,7 +186,7 @@
                 <div id="notification" style="color: red; font-size: 14px;">
                     The Progress Evaluation will start after the 3rd Q&A.
                 </div>
-                <button id="progress-toggle" style="background-color: grey; color: white; padding: 10px; border: none; border-radius: 4px; cursor: not-allowed;" disabled>
+                <button id="progress-toggle" onclick="window.location.href='/evaluation?mode=Guided%20Interview%20Mode';" disabled>
                     Show Progress Evaluation
                 </button>
             </div>
@@ -208,6 +208,7 @@
         <!-- Input Section -->
         <form method="POST" class="input-container">
             <input type="hidden" name="mode" value="{{ mode }}">
+            <input type="hidden" name="timer" id="timer-hidden" value="0"> <!-- Hidden timer field -->
             {% if mode == 'Full Interview Mode' and counter >= maxQuestions %}
                 <input type="text" name="user_input" placeholder="Type your question..." disabled>
                 <button type="submit" disabled>Send</button>
@@ -252,8 +253,14 @@
             window.location.href = '/mode'; // Redirect to start a new interview
         }
 
+        function showProgressEvaluation() {
+            const mode = "{{ mode }}";
+            window.location.href = `/evaluation?mode=${encodeURIComponent(mode)}`;
+        }
+
         function finishInterview() {
-            window.location.href = '/'; // Redirect to home or any finish logic
+            const mode = "{{ mode }}";
+            window.location.href = `/evaluation?mode=${encodeURIComponent(mode)}`;
         }
 
         let mode = "{{ mode | default('Full Interview Mode', true) }}";
@@ -308,9 +315,9 @@
         });
 
         function startTimer() {
-            // Display the timer
-            console.log("Timer started. Initial minutes:", minutes);
-            document.getElementById('timer').style.display = 'block';
+            let minutes = parseInt(sessionStorage.getItem('timer')) || 0;
+
+            // Update the timer display
             document.getElementById('minutes').textContent = minutes;
 
             // Increment the timer every minute
@@ -318,8 +325,12 @@
                 minutes++;
                 sessionStorage.setItem('timer', minutes);
                 document.getElementById('minutes').textContent = minutes;
+
+                // Update the hidden timer field
+                document.getElementById('timer-hidden').value = minutes;
             }, 60000); // 60000 milliseconds = 1 minute
         }
+
 
         // Start the timer only for Full Interview Mode
         if ("{{ mode }}" === "Full Interview Mode") {
