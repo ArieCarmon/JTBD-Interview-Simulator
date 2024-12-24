@@ -8,7 +8,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import json
-from copy import deepcopy
+
 
 
 # Load environment variables from .env file
@@ -131,7 +131,33 @@ def background_timer():
             timer += 1
             print(f"Timer Active: {timer_active}, Timer: {timer} minutes")
 
-subcategories = deepcopy({
+# Global DataFrame for storing scores
+evaluation_df = pd.DataFrame(columns=[
+    "Index", "Timestamp", "Q&A#",
+    "R - Question Technique Relevance", "E - Question Technique Effectiveness", "Question Technique CalcScore", "Question Technique AvgScore", "Question Technique TolScore",
+    "JTBD Framework Relevance", "JTBD Framework Effectiveness", "JTBD Framework CalcScore", "JTBD Framework AvgScore", "JTBD Framework TolScore",
+    "Progress Forces Relevance", "Progress Forces Effectiveness", "Progress Forces CalcScore", "Progress Forces AvgScore", "Progress Forces TolScore",
+    "Interview Mgmt Relevance", "Interview Mgmt Effectiveness", "Interview Mgmt CalcScore", "Interview Mgmt AvgScore", "Interview Mgmt TolScore",
+    "Market Opportunity Relevance", "Market Opportunity Effectiveness", "Market Opportunity CalcScore", "Market Opportunity AvgScore", "Market Opportunity TolScore",
+    "Innovation Relevance", "Innovation Effectiveness", "Innovation CalcScore", "Innovation AvgScore", "Innovation TolScore",
+    "Customer Segment Relevance", "Customer Segment Effectiveness", "Customer Segment CalcScore", "Customer Segment AvgScore", "Customer Segment TolScore",
+    "Strategic Relevance", "Strategic Effectiveness", "Strategic CalcScore", "Strategic AvgScore", "Strategic TolScore",
+    "Business Insight Score", "Interview Skills Score", "Total Score"
+])
+
+max_scores = {
+    "Question Technique": 15,
+    "JTBD Framework": 15,
+    "Progress Forces": 10,
+    "Interview Mgmt": 10,
+    "Market Opportunity": 15,
+    "Innovation": 15,
+    "Customer Segment": 10,
+    "Strategic": 10
+}
+
+# Define subcategories and their max scores
+subcategories = {
     "Question Technique": {"MaxScore": 15},
     "JTBD Framework": {"MaxScore": 15},
     "Progress Forces": {"MaxScore": 10},
@@ -140,27 +166,8 @@ subcategories = deepcopy({
     "Innovation": {"MaxScore": 15},
     "Customer Segment": {"MaxScore": 10},
     "Strategic": {"MaxScore": 10}
-})
+}
 
-# Global DataFrame for storing scores
-evaluation_df = pd.DataFrame(columns=[
-    "Timestamp", "Q&A #",
-    *[f"R - {sub}" for sub in subcategories.keys()],
-    *[f"E - {sub}" for sub in subcategories.keys()],
-    *[f"{sub} CalcScore" for sub in subcategories.keys()],
-    *[f"{sub} AvgScore" for sub in subcategories.keys()],
-    *[f"{sub} TotalScore" for sub in subcategories.keys()],
-    "Interview Skills Score", "Business Insight Score", "Total Score",
-    "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
-])
-
-#max_scores = {
-#    "JTBD Framework": 15,
-#    "Market Opportunity": 15,
-#    "Innovation": 15,
-#    "Customer Segment": 10,
-#    "Strategic": 10
-#}
 
 # Reset the DataFrame for each new interview
 def reset_scores():
@@ -195,7 +202,7 @@ def options():
 # Interview route
 @app.route('/interview', methods=['GET', 'POST'])
 def interview():
-    global questions_counter, conversation, evaluation_df, timer, duration, timer_active, subcategories
+    global questions_counter, conversation, evaluation_df, timer, duration, timer_active
 
     # Get mode and business domain
     mode = request.args.get('mode') or request.form.get('mode', 'Full Interview Mode')
@@ -208,7 +215,7 @@ def interview():
     # Initialize the evaluation DataFrame if it doesn't exist
     if evaluation_df is None or len(evaluation_df) == 0:
         evaluation_df = pd.DataFrame(columns=[
-            "Timestamp", "Q&A #",
+            "Index", "Timestamp", "Q&A #",
             *[f"R - {sub}" for sub in subcategories.keys()],
             *[f"E - {sub}" for sub in subcategories.keys()],
             *[f"{sub} CalcScore" for sub in subcategories.keys()],
@@ -273,9 +280,6 @@ def interview():
 
         questions_counter += 1
 
-        # Debugging Subcategories Before Feedback Processing
-        print("Subcategories Before Processing:", subcategories)
-
         # Step 2: Generate Feedback for the Q&A Pair
         prompt = (
             "You are a JTBD (Jobs-To-Be-Done) expert evaluator trained in the methodologies of Christensen, Moesta, and Klement. "
@@ -291,15 +295,15 @@ def interview():
             "   o Effectiveness (0–5): How well the Q&A supports each relevant sub-category.\n"
             "   o Sub-Categories:\n"
             "     • Interview Skills:\n"
-            "       1. Question Technique (clarity, follow-ups, open-ended).\n"
-            "       2. JTBD Framework (job discovery, context, timeline).\n"
-            "       3. Progress Forces (push, pull, anxiety, habits).\n"
-            "       4. Interview Mgmt (flow, rapport, time).\n"
+            "       1. Question Technique & Structure (clarity, follow-ups, open-ended).\n"
+            "       2. JTBD Framework Application (job discovery, context, timeline).\n"
+            "       3. Progress Forces Exploration (push, pull, anxiety, habits).\n"
+            "       4. Interview Management (flow, rapport, time).\n"
             "     • Business Insights:\n"
             "       1. Market Opportunity (needs, gaps, competition).\n"
-            "       2. Innovation (solutions, value propositions).\n"
+            "       2. Product/Service Innovation (solutions, value propositions).\n"
             "       3. Customer Segment (characteristics, behavior).\n"
-            "       4. Strategic (actions, implications, priorities).\n"
+            "       4. Strategic Recommendations (actions, implications, priorities).\n"
             "\n"
             "2. Verbal Feedback:\n"
             "   o For all completed Q&A pairs, summarize in four sections (no more than 5 points per section):\n"
@@ -312,16 +316,14 @@ def interview():
             "{\n"
             "  \"numerical_feedback\": {\n"
             "    \"Interview Skills\": {\n"
-            "      \"Question Technique\": {\"relevance\": 0.9, \"effectiveness\": 4.5},\n"
-            "      \"JTBD Framework\": {\"relevance\": 0.8, \"effectiveness\": 4.0},\n"
-            "      \"Progress Forces\": {\"relevance\": 0.7, \"effectiveness\": 3.5},\n"
-            "      \"Interview Mgmt\": {\"relevance\": 0.6, \"effectiveness\": 4.0}\n"
+            "      \"Question Technique & Structure\": {\"relevance\": 0.9, \"effectiveness\": 4.5},\n"
+            "      \"JTBD Framework Application\": {\"relevance\": 0.8, \"effectiveness\": 4.0},\n"
+            "      ...\n"
             "    },\n"
             "    \"Business Insights\": {\n"
             "      \"Market Opportunity\": {\"relevance\": 0.7, \"effectiveness\": 4.0},\n"
-            "      \"Innovation\": {\"relevance\": 0.9, \"effectiveness\": 4.5},\n"
-            "      \"Customer Segment\": {\"relevance\": 0.8, \"effectiveness\": 4.0},\n"
-            "      \"Strategic\": {\"relevance\": 0.6, \"effectiveness\": 3.5}\n"
+            "      \"Product/Service Innovation\": {\"relevance\": 0.9, \"effectiveness\": 4.5},\n"
+            "      ...\n"
             "    }\n"
             "  },\n"
             "  \"verbal_feedback\": {\n"
@@ -344,24 +346,36 @@ def interview():
             raw_response = response['choices'][0]['message']['content']
             print("Raw API Response:", raw_response)  # Debugging
 
-            feedback_data = json.loads(raw_response)
-            numerical_feedback = feedback_data['numerical_feedback']
-            raw_scores = {}
-            for category, subs in numerical_feedback.items():
-                for sub, scores in subs.items():
-                    raw_scores[f"R - {sub}"] = scores["relevance"]
-                    raw_scores[f"E - {sub}"] = scores["effectiveness"]
+            # Split Numerical and Verbal Feedback
+            numerical_feedback_section = raw_response.split("Verbal Feedback:")[0].strip()
+            verbal_feedback_section = raw_response.split("Verbal Feedback:")[1].strip()
 
-            # Extract verbal feedback
-            verbal_feedback = feedback_data['verbal_feedback']
+            print("Numerical Feedback Section:", numerical_feedback_section)
+            print("Verbal Feedback Section:", verbal_feedback_section)
+
+            # Parse Numerical Feedback
+            numerical_feedback = json.loads(numerical_feedback_section)
+
+            raw_scores = {}
+            for sub, scores in numerical_feedback.items():
+                print(f"Parsing sub-category: {sub}, scores: {scores}")
+                raw_scores[f"R - {sub}"] = scores.get("relevance", 0)  # Default relevance to 0 if missing
+                raw_scores[f"E - {sub}"] = scores.get("effectiveness", 0)  # Default effectiveness to 0 if missing
+
+            # Parse Verbal Feedback
+            verbal_feedback = json.loads(verbal_feedback_section)
+            print("Parsed Verbal Feedback:", verbal_feedback)
+
             key_findings = "; ".join(verbal_feedback.get("Key Findings", []))
             strengths = "; ".join(verbal_feedback.get("Interview Strengths", []))
             improvements = "; ".join(verbal_feedback.get("Areas for Improvement", []))
             follow_up_questions = "; ".join(verbal_feedback.get("Recommended Follow-Up Questions", []))
 
+            # Append to Evaluation DataFrame
             new_row = {
+                "Index": questions_counter,
                 "Timestamp": pd.Timestamp.now(),
-                "Q&A #": questions_counter,
+                "Q&A #": questions_counter + 1,
                 **raw_scores,
                 "Key Findings": key_findings,
                 "Interview Strengths": strengths,
@@ -370,63 +384,18 @@ def interview():
             }
             evaluation_df = pd.concat([evaluation_df, pd.DataFrame([new_row])], ignore_index=True)
 
-            # Normalize subcategories dictionary
-            normalized_subcategories = {
-                key.strip().lower().replace(" ", "_"): value for key, value in subcategories.items()
-            }
-
-            # Debugging: Print expected and actual subcategories
-            print("Expected Subcategories:", list(subcategories.keys()))
-            print("Raw Response Subcategories:", list(numerical_feedback["Business Insights"].keys()))
-
-            # Verify the subcategories dictionary is structured properly
-            print("Subcategories Dictionary:", subcategories)
-
             # Calculate Derived Scores
             for sub in subcategories.keys():
-                print(f"Processing sub-category: {sub}")
                 relevance_col = f"R - {sub}"
                 effectiveness_col = f"E - {sub}"
                 calc_col = f"{sub} CalcScore"
                 avg_col = f"{sub} AvgScore"
                 total_col = f"{sub} TotalScore"
 
-                if relevance_col not in evaluation_df or effectiveness_col not in evaluation_df:
-                    print(f"Missing columns for sub-category: {sub}")
-                    continue
+                evaluation_df[calc_col] = evaluation_df[relevance_col] * evaluation_df[effectiveness_col]
+                evaluation_df[avg_col] = evaluation_df[calc_col].expanding().mean()
+                evaluation_df[total_col] = (evaluation_df[avg_col] / 5 * subcategories[sub]["MaxScore"]).round(0)
 
-                # Normalize subcategory name and fetch MaxScore
-                normalized_sub = sub.strip().lower().replace(" ", "_")
-                if normalized_sub not in normalized_subcategories:
-                    print(f"Error: Sub-category '{sub}' not found in normalized subcategories.")
-                    continue
-
-                # Debug MaxScore access
-                print(f"Accessing MaxScore for sub-category: {sub}")
-                if sub not in subcategories:
-                    print(f"Sub-category '{sub}' not found in subcategories.")
-                    continue
-
-                try:
-                    max_score = subcategories[sub]["MaxScore"]
-                    print(f"MaxScore for '{sub}': {max_score}")
-
-                    if relevance_col in evaluation_df and effectiveness_col in evaluation_df:
-                        # Set CalcScore to NaN if Relevance < 0.3
-                        evaluation_df[calc_col] = evaluation_df.apply(
-                            lambda row: row[relevance_col] * row[effectiveness_col]
-                            if row[relevance_col] >= 0.3 else float('NaN'),
-                            axis=1
-                        )
-                    evaluation_df[avg_col] = evaluation_df[calc_col].expanding().mean()
-                    evaluation_df[total_col] = (
-                        evaluation_df[avg_col] / 5 * normalized_subcategories[normalized_sub]["MaxScore"]
-                    )
-                except KeyError as e:
-                    print(f"Error accessing MaxScore for sub-category: {sub}")
-                    raise
-
-            # Calculate Overall Scores
             evaluation_df["Interview Skills Score"] = evaluation_df[
                 [f"{sub} TotalScore" for sub in
                  ["Question Technique", "JTBD Framework", "Progress Forces", "Interview Mgmt"]]
@@ -436,34 +405,15 @@ def interview():
                 [f"{sub} TotalScore" for sub in ["Market Opportunity", "Innovation", "Customer Segment", "Strategic"]]
             ].sum(axis=1)
 
-            evaluation_df["Total Score"] = evaluation_df["Interview Skills Score"] + evaluation_df[
-                "Business Insight Score"]
-
-            # Reorder Columns
-            evaluation_df = evaluation_df.reindex(columns=[
-                "Timestamp", "Q&A #",
-                *[f"R - {sub}" for sub in subcategories.keys()],
-                *[f"E - {sub}" for sub in subcategories.keys()],
-                *[f"{sub} CalcScore" for sub in subcategories.keys()],
-                *[f"{sub} AvgScore" for sub in subcategories.keys()],
-                *[f"{sub} TotalScore" for sub in subcategories.keys()],
-                "Interview Skills Score", "Business Insight Score", "Total Score",
-                "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
-            ])
+            evaluation_df["Total Score"] = evaluation_df["Interview Skills Score"] + evaluation_df["Business Insight Score"]
 
             # Save to Excel AFTER calculations
             print("Saving evaluation DataFrame to Excel...")
             evaluation_df.to_excel("evaluation_debug.xlsx", index=False)
             print("File saved.")
 
-            print("Last Row of Evaluation DataFrame:")
-            print(evaluation_df.tail(1))
-
         except Exception as e:
             print(f"Error processing feedback: {e}")
-
-        # Debugging Subcategories After Feedback Processing
-        print("Subcategories After Processing:", subcategories)
 
         # Render the updated interview screen
         return render_template(
