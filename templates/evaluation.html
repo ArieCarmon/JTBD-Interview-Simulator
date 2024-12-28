@@ -122,33 +122,31 @@
 
     <div class="overall-performance">
         <h3>Overall Performance</h3>
-        <p>Total Score: {{ total_score }}/100</p>
+        <p>Total Score: {{ scores["Total Score"] | round | int }}/100</p>
     </div>
 
     <div class="categories">
         <div class="category">
             <h3>Interview Skills</h3>
-            <p>Score: {{ skills_score }}/50</p>
+            <p>Score: {{ scores["Interview Skills Score"] | round | int }}/50</p>
             <button onclick="toggleDetails('skills-details')">Show Details</button>
             <div id="skills-details" style="display: none;">
                 <ul>
-                    <li>Question Technique: {{ question_technique }}/15</li>
-                    <li>JTBD Framework: {{ jtbd_framework }}/15</li>
-                    <li>Progress Forces: {{ progress_forces }}/10</li>
-                    <li>Interview Management: {{ interview_management }}/10</li>
+                    {% for sub in ["Question Technique", "JTBD Framework", "Progress Forces", "Interview Mgmt"] %}
+                        <li>{{ sub }}: {{ scores[sub] | round | int }}/{{ subcategories[sub]["MaxScore"] }}</li>
+                    {% endfor %}
                 </ul>
             </div>
         </div>
         <div class="category">
             <h3>Business Insights</h3>
-            <p>Score: {{ insights_score }}/50</p>
+            <p>Score: {{ scores["Business Insight Score"] | round | int }}/50</p>
             <button onclick="toggleDetails('insights-details')">Show Details</button>
             <div id="insights-details" style="display: none;">
                 <ul>
-                    <li>Market Opportunity: {{ market_opportunity }}/15</li>
-                    <li>Innovation: {{ innovation }}/15</li>
-                    <li>Customer Segment: {{ customer_segment }}/10</li>
-                    <li>Strategic Recommendations: {{ strategic_recommendations }}/10</li>
+                    {% for sub in ["Market Opportunity", "Innovation", "Customer Segment", "Strategic"] %}
+                        <li>{{ sub }}: {{ scores[sub] | round | int }}/{{ subcategories[sub]["MaxScore"] }}</li>
+                    {% endfor %}
                 </ul>
             </div>
         </div>
@@ -156,50 +154,71 @@
 
     <div class="section">
         <h3>Key Findings</h3>
-        <p>{{ key_findings }}</p>
+        <ul>
+            {% for finding in feedback["Key Findings"].split("; ") %}
+                <li>{{ finding }}</li>
+            {% endfor %}
+        </ul>
     </div>
 
     <div class="section">
         <h3 class="green-text">Interview Strengths</h3>
-        <p class="green-text">{{ strengths }}</p>
+        <ul>
+            {% for strength in feedback["Interview Strengths"].split("; ") %}
+                <li class="green-text">{{ strength }}</li>
+            {% endfor %}
+        </ul>
     </div>
 
     <div class="section">
         <h3 class="red-text">Areas for Improvement</h3>
-        <p class="red-text">{{ areas_for_improvement }}</p>
+        <ul>
+            {% for improvement in feedback["Areas for Improvement"].split("; ") %}
+                <li class="red-text">{{ improvement }}</li>
+            {% endfor %}
+        </ul>
     </div>
 
     <div class="section">
         <h3 class="blue-text">Recommended Follow-Up Questions</h3>
-        <p class="blue-text">{{ follow_up_questions }}</p>
+        <ul>
+            {% for question in feedback["Recommended Follow-Up Questions"].split("; ") %}
+                <li class="blue-text">{{ question }}</li>
+            {% endfor %}
+        </ul>
     </div>
 
-    {% if mode == 'Full Interview Mode' %}
+
+    {% if is_final %}
         <div class="section">
             <h3>Transcript</h3>
-            <p>{{ transcript }}</p>
+            <div>
+                {% for message in transcript %}
+                    <p><b>{{ message["role"] }}:</b> {{ message["content"] }}</p>
+                {% endfor %}
+            </div>
         </div>
     {% endif %}
 
-    {% if mode == 'Guided Interview Mode' %}
+    {% if mode == 'Guided Interview Mode' and not is_final %}
         <div class="buttons">
-            <button class="return-to-interview" onclick="window.location.href='/interview?mode=Guided%20Interview%20Mode&resume=true';">Return to Interview</button>
+            <button class="return-to-interview" onclick="window.location.href='/interview?mode=Guided%20Interview%20Mode&resume=true&business_domain={{ business_domain }}';">Return to Interview</button>
         </div>
     {% else %}
-        <div class="buttons">
-            <button class="start-new" onclick="window.location.href='/mode';">Start New Interview</button>
-            <button class="download" onclick="downloadReport()">Download Report</button>
-        </div>
+       <div class="buttons">
+    <button class="start-new" onclick="window.location.href='/mode';">Start New Interview</button>
+    <!-- <button class="download" onclick="window.location.href='/download_report?business_domain={{ business_domain }}';">Download Report</button> -->
+    <button class="download" onclick="window.location.href='/download_report';">Download Report</button>
+</div>
     {% endif %}
+
     <script>
         function toggleDetails(id) {
             const details = document.getElementById(id);
             details.style.display = details.style.display === 'none' ? 'block' : 'none';
         }
-
-        function downloadReport() {
-            alert("Download functionality not implemented yet.");
-        }
     </script>
+
 </body>
+
 </html>

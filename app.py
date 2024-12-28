@@ -1,21 +1,23 @@
-from flask import Flask, render_template, request, session
+from flask import Flask, render_template, request, session, render_template_string
 from dotenv import load_dotenv
-import os
 import openai
 import threading
 import time
-from datetime import datetime
 import pandas as pd
-import numpy as np
 import json
 from copy import deepcopy
+from flask import make_response
+from flask import url_for, send_file
+import os
+import pdfkit
+
 
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Global variables
-maxQuestions = 20  # Set to 5 for testing; change to 30 later
+maxQuestions = 30  # Set to 5 for testing; change to 30 later
 
 # Access the OpenAI API Key
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -26,6 +28,9 @@ conversation = []
 timer = 0  # Active timer during the interview
 duration = 0  # Total duration of the interview
 timer_active = False # Controls whether the timer is running
+business_domain = None  # Will be set when domain is selected
+print("Initial global business_domain:", business_domain)
+
 
 # Define personas for each business domain
 personas = {
@@ -154,18 +159,11 @@ evaluation_df = pd.DataFrame(columns=[
     "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
 ])
 
-#max_scores = {
-#    "JTBD Framework": 15,
-#    "Market Opportunity": 15,
-#    "Innovation": 15,
-#    "Customer Segment": 10,
-#    "Strategic": 10
-#}
-
 # Reset the DataFrame for each new interview
 def reset_scores():
     global evaluation_df
     evaluation_df = pd.DataFrame(columns=evaluation_df.columns)
+
 # Initialize Flask App
 app = Flask(__name__)
 
@@ -195,30 +193,39 @@ def options():
 # Interview route
 @app.route('/interview', methods=['GET', 'POST'])
 def interview():
-    global questions_counter, conversation, evaluation_df, timer, duration, timer_active, subcategories
+    global questions_counter, conversation, evaluation_df, timer, duration, timer_active, subcategories, business_domain
+    print("Interview route - Start - business_domain:", business_domain)
 
     # Get mode and business domain
     mode = request.args.get('mode') or request.form.get('mode', 'Full Interview Mode')
-    business_domain = request.args.get('business_domain') or request.form.get('business_domain', 'Airline Operations')
     resume = request.args.get('resume', 'false').lower() == 'true'
+
+    if not resume:
+        # Only update business_domain if not resuming
+        business_domain = request.args.get('business_domain') or request.form.get('business_domain',
+                                                                                  'Airline Operations')
+    print("After setting - Global business_domain:", business_domain)
+
+    #resume = request.args.get('resume', 'false').lower() == 'true'
 
     # Load persona details based on business domain
     persona = personas.get(business_domain, {})
 
-    # Initialize the evaluation DataFrame if it doesn't exist
-    if evaluation_df is None or len(evaluation_df) == 0:
-        evaluation_df = pd.DataFrame(columns=[
-            "Timestamp", "Q&A #",
-            *[f"R - {sub}" for sub in subcategories.keys()],
-            *[f"E - {sub}" for sub in subcategories.keys()],
-            *[f"{sub} CalcScore" for sub in subcategories.keys()],
-            *[f"{sub} AvgScore" for sub in subcategories.keys()],
-            *[f"{sub} TotalScore" for sub in subcategories.keys()],
-            "Interview Skills Score", "Business Insight Score", "Total Score",
-            "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
-        ])
+
 
     if request.method == 'GET':
+        if not resume:
+            evaluation_df = pd.DataFrame(columns=[
+                "Timestamp", "Q&A #",
+                *[f"R - {sub}" for sub in subcategories.keys()],
+                *[f"E - {sub}" for sub in subcategories.keys()],
+                *[f"{sub} CalcScore" for sub in subcategories.keys()],
+                *[f"{sub} AvgScore" for sub in subcategories.keys()],
+                *[f"{sub} TotalScore" for sub in subcategories.keys()],
+                "Interview Skills Score", "Business Insight Score", "Total Score",
+                "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
+            ])
+            print("Evaluation DataFrame reset for new interview.")
         if resume and mode == 'Guided Interview Mode':
             print("Resuming Guided Interview session...")
         else:
@@ -233,7 +240,13 @@ def interview():
             timer = 0  # Reset timer
             duration = 0  # Reset duration
 
-        timer_active = True
+        if not resume:  # New session
+            timer_active = True
+            timer = 0  # Reset timer for new session
+            print("Starting a new session. Timer reset to 0.")
+        else:  # Resuming session
+            timer_active = True  # Ensure timer continues running
+            print(f"Resuming session with timer at {timer} minutes.")
 
         # Render the interview screen
         return render_template(
@@ -249,6 +262,10 @@ def interview():
     elif request.method == 'POST':
         user_input = request.form['user_input']
         conversation.append({"role": "user", "content": user_input})
+
+        if mode == "Guided Interview Mode" and not timer_active:
+            timer_active = True  # Ensure timer continues running
+            print("Continuing guided mode timer:", timer)
 
         # Step 1: Generate Persona's Answer
         persona_prompt = (
@@ -369,6 +386,8 @@ def interview():
                 "Recommended Follow-Up Questions": follow_up_questions
             }
             evaluation_df = pd.concat([evaluation_df, pd.DataFrame([new_row])], ignore_index=True)
+            print("Evaluation DataFrame after appending new row:")
+            print(evaluation_df.info())
 
             # Normalize subcategories dictionary
             normalized_subcategories = {
@@ -439,18 +458,6 @@ def interview():
             evaluation_df["Total Score"] = evaluation_df["Interview Skills Score"] + evaluation_df[
                 "Business Insight Score"]
 
-            # Reorder Columns
-            evaluation_df = evaluation_df.reindex(columns=[
-                "Timestamp", "Q&A #",
-                *[f"R - {sub}" for sub in subcategories.keys()],
-                *[f"E - {sub}" for sub in subcategories.keys()],
-                *[f"{sub} CalcScore" for sub in subcategories.keys()],
-                *[f"{sub} AvgScore" for sub in subcategories.keys()],
-                *[f"{sub} TotalScore" for sub in subcategories.keys()],
-                "Interview Skills Score", "Business Insight Score", "Total Score",
-                "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
-            ])
-
             # Save to Excel AFTER calculations
             print("Saving evaluation DataFrame to Excel...")
             evaluation_df.to_excel("evaluation_debug.xlsx", index=False)
@@ -473,24 +480,72 @@ def interview():
             mode=mode,
             maxQuestions=maxQuestions,
             persona=persona,
-            timer=timer
+            timer=timer,
+            business_domain = business_domain
         )
 
 
 # Evaluation route
 @app.route('/evaluation', methods=['GET'])
 def evaluation():
-    global questions_counter, conversation, timer, duration, timer_active
+    global questions_counter, conversation, timer, duration, timer_active, evaluation_df, subcategories, business_domain
+    print("Evaluation route - business_domain:", business_domain)
 
+    #business_domain = request.args.get('business_domain', 'Airline Operations')
+
+    # Determine if this is the final or progress evaluation
     mode = request.args.get('mode', 'Full Interview Mode')
-    duration_to_display = timer if mode == 'Guided Interview Mode' else duration
+    is_final = request.args.get('final', 'true').lower() == 'true'
 
-    print(f"Time passed to evaluation: {duration_to_display} minutes")  # Debugging log
+    # Use the global timer for progress evaluation or duration for final evaluation
+    duration_to_display = timer if not is_final else duration
+    print(f"Timer passed to evaluation screen: {duration_to_display} minutes")  # Debugging log
+
+    # Get the latest row from the evaluation DataFrame
+    latest_row = evaluation_df.iloc[-1] if not evaluation_df.empty else None
+
+    # Extract numerical scores
+    scores = {}
+    if latest_row is not None:
+        scores = {
+            "Interview Skills Score": latest_row["Interview Skills Score"],
+            "Business Insight Score": latest_row["Business Insight Score"],
+            "Total Score": latest_row["Total Score"]
+        }
+
+    # Add subcategory scores dynamically
+    for sub in subcategories.keys():
+        scores[sub] = latest_row.get(f"{sub} TotalScore", "N/A")
+
+    # Extract verbal feedback
+    feedback = {}
+    if latest_row is not None:
+        feedback = {
+            "Key Findings": latest_row["Key Findings"],
+            "Interview Strengths": latest_row["Interview Strengths"],
+            "Areas for Improvement": latest_row["Areas for Improvement"],
+            "Recommended Follow-Up Questions": latest_row["Recommended Follow-Up Questions"]
+        }
+
+    # Include the transcript only for final evaluations
+    #transcript = conversation if is_final else None
+    transcript = [
+        {
+            "role": "Executive" if message["role"] == "assistant" else "You",
+            "content": message["content"]
+        }
+        for message in conversation
+    ] if is_final else None
 
     return render_template(
         'evaluation.html',
+        business_domain=business_domain,
         mode=mode,
-        conversation=conversation,
+        is_final=is_final,
+        subcategories=subcategories,
+        scores=scores,
+        feedback=feedback,
+        transcript=transcript,
         counter=questions_counter,
         duration=duration_to_display  # Pass appropriate value
     )
@@ -513,6 +568,117 @@ def stop_timer():
     print("Timer reset and thread cleared.")
     return '', 204  # No content response
 
+
+@app.route('/download_report', methods=['GET'])
+def download_report():
+    global business_domain
+    print("Business Domain is:", business_domain)
+    output_path = 'temp_report.pdf'
+
+    try:
+        print("Starting download_report function")
+        print(f"Using global business domain: {business_domain}")
+
+        # Use global business_domain directly
+        current_persona = personas[business_domain]
+        print(f"Found persona: {current_persona}")
+
+        timestamp = pd.Timestamp.now()
+
+        # Debugging evaluation_df
+        print("Evaluation DF empty?", evaluation_df.empty)
+        if not evaluation_df.empty:
+            print("Last row keys:", list(evaluation_df.iloc[-1].keys()))
+
+        # Handle scores
+        if not evaluation_df.empty:
+            latest_row = evaluation_df.iloc[-1]
+            scores = {
+                "Interview Skills Score": int(
+                    latest_row["Interview Skills Score"] if pd.notnull(latest_row["Interview Skills Score"]) else 0),
+                "Business Insight Score": int(
+                    latest_row["Business Insight Score"] if pd.notnull(latest_row["Business Insight Score"]) else 0),
+                "Total Score": int(latest_row["Total Score"] if pd.notnull(latest_row["Total Score"]) else 0)
+            }
+
+            for sub in subcategories.keys():
+                score_value = latest_row.get(f"{sub} TotalScore", 0)
+                scores[sub] = int(score_value if pd.notnull(score_value) else 0)
+        else:
+            print("No evaluation data, using default scores")
+            scores = {
+                "Interview Skills Score": 0,
+                "Business Insight Score": 0,
+                "Total Score": 0,
+                **{sub: 0 for sub in subcategories.keys()}
+            }
+
+        print("Scores prepared:", scores)
+
+        # Render template
+        print("Starting template rendering")
+        html = render_template(
+            'final_report.html',
+            timestamp=timestamp,
+            #mode=mode,
+            subcategories=subcategories,
+            scores=scores,
+            feedback={
+                "Key Findings": latest_row["Key Findings"] if not evaluation_df.empty else "",
+                "Interview Strengths": latest_row["Interview Strengths"] if not evaluation_df.empty else "",
+                "Areas for Improvement": latest_row["Areas for Improvement"] if not evaluation_df.empty else "",
+                "Recommended Follow-Up Questions": latest_row[
+                    "Recommended Follow-Up Questions"] if not evaluation_df.empty else ""
+            } if not evaluation_df.empty else {},
+            transcript=[
+                {
+                    "role": "Executive" if message["role"] == "assistant" else "You",
+                    "content": message["content"]
+                }
+                for message in conversation
+            ],
+            counter=questions_counter,
+            duration=duration,
+            persona=current_persona
+        )
+        print("Template rendered successfully")
+
+        # Generate PDF
+        print("Starting PDF generation")
+        options = {
+            'page-size': 'Letter',
+            'margin-top': '0.75in',
+            'margin-right': '0.75in',
+            'margin-bottom': '0.75in',
+            'margin-left': '0.75in',
+            'encoding': 'UTF-8',
+            'enable-local-file-access': True,
+            'quiet': ''
+        }
+
+        config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
+        pdfkit.from_string(html, output_path, options=options, configuration=config)
+        print("PDF generated successfully")
+
+        return send_file(
+            output_path,
+            as_attachment=True,
+            download_name="JTBD_Interview_Analysis_Report.pdf",
+            mimetype='application/pdf'
+        )
+
+    except Exception as e:
+        print(f"Error generating report: {e}")
+        import traceback
+        traceback.print_exc()
+        return make_response(f"Failed to generate report: {str(e)}", 500)
+
+    finally:
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception as e:
+                print(f"Error removing temporary file: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True)

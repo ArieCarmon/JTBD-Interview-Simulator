@@ -186,7 +186,7 @@
                 <div id="notification" style="color: red; font-size: 14px;">
                     The Progress Evaluation will start after the 3rd Q&A.
                 </div>
-                <button id="progress-toggle" onclick="window.location.href='/evaluation?mode=Guided%20Interview%20Mode';" disabled>
+                <button id="progress-toggle" onclick="window.location.href='/evaluation?mode=Guided%20Interview%20Mode&final=false';">
                     Show Progress Evaluation
                 </button>
             </div>
@@ -264,10 +264,18 @@
             });
     }
 
-    function finishInterview() {
+   function finishInterview() {
+    // Get mode from URL parameters (we still need this)
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+
         fetch('/stop_timer', { method: 'POST' }) // Call server to stop the timer
             .then(() => {
-                window.location.href = '/evaluation'; // Navigate to evaluation screen
+                window.location.href = `/evaluation?final=true&mode=${mode}`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                window.location.href = `/evaluation?final=true&mode=${mode}`;
             });
     }
 
