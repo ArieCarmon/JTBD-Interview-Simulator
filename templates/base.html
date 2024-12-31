@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}JTBD Simulator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    {% block content %}
+    <!-- Page-specific content will go here -->
+    {% endblock %}
+
+    <!-- Exit Button -->
+    <button class="exit-button" onclick="openModal('exit-modal')">Exit</button>
+
+    <!-- Exit Modal -->
+    <div class="modal" id="exit-modal">
+        <div class="modal-content">
+            <p>Are you sure you want to exit the simulator?</p>
+            <button class="yes-button" onclick="exitApplication()">Yes</button>
+            <button class="no-button" onclick="closeModal('exit-modal')">No</button>
+        </div>
+    </div>
+
+    <script>
+        function openModal(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function exitApplication() {
+            // Close the modal
+            closeModal('exit-modal');
+
+            // Display the thank-you message
+            document.body.innerHTML = `
+                <div style="text-align: center; font-family: Arial, sans-serif; margin-top: 20%;">
+                    <h1>Thank you for using the JTBD Interview Simulator</h1>
+                    <p>We hope to see you again soon!</p>
+                </div>
+            `;
+
+            // Attempt to close the browser tab
+            setTimeout(() => {
+                window.close();
+            }, 3000); // Give the user time to read the thank-you message
+        }
+    </script>
+</body>
+</html>

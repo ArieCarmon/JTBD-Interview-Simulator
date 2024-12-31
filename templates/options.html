@@ -153,5 +153,110 @@
         }
 
     </script>
+
+    <!-- Exit Button and Modal Block -->
+    <style>
+        /* Exit Button Styling */
+        .exit-button {
+            position: fixed;
+            bottom: 0.5in;
+            right: 0.5in;
+            background-color: #ff4d4d;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            z-index: 1000;
+        }
+
+        body .exit-button:hover {
+            background-color: #e64545 !important; /* Override any inherited styles */
+        }
+
+        /* Modal Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 2000;
+            text-align: center;
+            width: 300px;
+        }
+
+        .modal p {
+            margin: 0 0 20px;
+            font-size: 18px;
+        }
+
+        .modal button {
+            margin: 5px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .yes-button {
+            background: #28a745;
+            color: white;
+        }
+
+         .yes-button:hover {
+            background-color: #218838; /* Darker green */
+        }
+
+        .no-button {
+            background: #ff4d4d;
+            color: white;
+        }
+
+        .no-button:hover {
+            background-color: #e64545; /* Darker red */
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1999;
+        }
+    </style>
+
+    <div>
+        <!-- Exit Button -->
+        <button class="exit-button" onclick="openModal('exit-modal')">Exit</button>
+
+        <!-- Confirmation Modal -->
+        <div class="modal-overlay" id="modal-overlay" onclick="closeModal('exit-modal')"></div>
+        <div class="modal" id="exit-modal">
+            <p>Are you sure you want to exit?</p>
+            <button class="yes-button" onclick="window.location.href='/thank-you'">Yes</button>
+            <button class="no-button" onclick="closeModal('exit-modal')">No</button>
+        </div>
+    </div>
+
+    <script>
+        function openModal(id) {
+            document.getElementById(id).style.display = 'block';
+            document.getElementById('modal-overlay').style.display = 'block';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+    </script>
 </body>
 </html>

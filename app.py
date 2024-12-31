@@ -134,6 +134,7 @@ def background_timer():
             if not timer_active:  # Check if the timer was deactivated during the wait
                 break
             timer += 1
+            #session['timer'] = timer  # Persist timer in session
             print(f"Timer Active: {timer_active}, Timer: {timer} minutes")
 
 subcategories = deepcopy({
@@ -185,6 +186,14 @@ def home():
     # Render your existing welcome.html page
     return render_template('welcome.html')
 
+@app.route('/start_timer', methods=['POST'])
+def start_timer():
+    global timer, timer_active
+    timer = 0  # Reset the timer for the new session
+    timer_active = True  # Restart the timer thread
+    print("Timer restarted for new session.")
+    return '', 204
+
 # Options selection route
 @app.route('/mode')
 def options():
@@ -215,6 +224,12 @@ def interview():
 
     if request.method == 'GET':
         if not resume:
+            timer = 0  # Reset timer
+            if mode == 'Guided Interview Mode':  # Specific to Guided Mode
+                print("Starting a new session. Timer reset to 0.")
+            timer_active = True
+            questions_counter = 0
+            conversation = []
             evaluation_df = pd.DataFrame(columns=[
                 "Timestamp", "Q&A #",
                 *[f"R - {sub}" for sub in subcategories.keys()],
@@ -226,7 +241,12 @@ def interview():
                 "Key Findings", "Interview Strengths", "Areas for Improvement", "Recommended Follow-Up Questions"
             ])
             print("Evaluation DataFrame reset for new interview.")
+        else:  # Resuming session
+            timer_active = True
+            print(f"Resuming session with timer at {timer} minutes.")
+
         if resume and mode == 'Guided Interview Mode':
+        #if resume and mode == 'Guided Interview Mode':
             print("Resuming Guided Interview session...")
         else:
             # Start a new session
@@ -235,18 +255,20 @@ def interview():
                 f"{persona['introduction']} I have about an hour to 90 minutes for this conversation. "
                 "I am ready to answer your questions."
             )
+
+            #timer = session.get('timer', 0)  # Fetch timer from session (default to 0 if not set)
             conversation = [{"role": "assistant", "content": opening_message}]
             questions_counter = 0
             timer = 0  # Reset timer
             duration = 0  # Reset duration
 
-        if not resume:  # New session
-            timer_active = True
-            timer = 0  # Reset timer for new session
-            print("Starting a new session. Timer reset to 0.")
-        else:  # Resuming session
-            timer_active = True  # Ensure timer continues running
-            print(f"Resuming session with timer at {timer} minutes.")
+        #if not resume:  # New session
+        #    timer_active = True
+        #    session['timer'] = 0  # Reset timer for new session
+        #    print("Starting a new session. Timer reset to 0.")
+        #else:  # Resuming session
+        #    timer_active = True  # Ensure timer continues running
+        #    print(f"Resuming session with timer at {timer} minutes.")
 
         # Render the interview screen
         return render_template(
@@ -472,6 +494,10 @@ def interview():
         # Debugging Subcategories After Feedback Processing
         print("Subcategories After Processing:", subcategories)
 
+        # Persist Timer After Processing
+        #session['timer'] = timer  # Save the current timer value in session
+        print(f"Timer value after processing question: {timer} minutes")
+
         # Render the updated interview screen
         return render_template(
             'interview.html',
@@ -481,7 +507,8 @@ def interview():
             maxQuestions=maxQuestions,
             persona=persona,
             timer=timer,
-            business_domain = business_domain
+            business_domain = business_domain,
+            auto_scroll = True
         )
 
 
@@ -497,7 +524,7 @@ def evaluation():
     mode = request.args.get('mode', 'Full Interview Mode')
     is_final = request.args.get('final', 'true').lower() == 'true'
 
-    # Use the global timer for progress evaluation or duration for final evaluation
+    # Use the session's timer value for progress evaluation, or duration for the final evaluation
     duration_to_display = timer if not is_final else duration
     print(f"Timer passed to evaluation screen: {duration_to_display} minutes")  # Debugging log
 
@@ -536,6 +563,11 @@ def evaluation():
         }
         for message in conversation
     ] if is_final else None
+
+    # Persist the current timer value in the session
+    #session['timer'] = session.get('timer', 0)  # Ensure the latest value is saved
+    print(f"Timer saved for evaluation: {timer} minutes")  # Debugging log
+    print(f"Duration displayed: {duration_to_display}")
 
     return render_template(
         'evaluation.html',
@@ -679,6 +711,10 @@ def download_report():
                 os.remove(output_path)
             except Exception as e:
                 print(f"Error removing temporary file: {e}")
+
+@app.route('/thank-you')
+def thank_you():
+    return render_template('thank-you.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
