@@ -165,6 +165,33 @@ def reset_scores():
     global evaluation_df
     evaluation_df = pd.DataFrame(columns=evaluation_df.columns)
 
+# Function to merge and limit feedback
+def merge_and_limit_feedback(existing, new, max_points=10):
+    """
+    Merge existing and new feedback, prioritize new points, and limit to max_points.
+    :param existing: Existing feedback string (semicolon-separated).
+    :param new: New feedback list.
+    :param max_points: Maximum number of points to retain.
+    :return: Merged feedback string (semicolon-separated).
+    """
+    existing_list = existing.split("; ") if existing else []
+    combined = list(dict.fromkeys(new + existing_list))  # Prioritize new feedback by placing it first
+    return "; ".join(combined[:max_points])  # Keep only the first max_points
+
+
+def get_existing_feedback(evaluation_df):
+    """
+    Retrieve the existing cumulative feedback from the DataFrame.
+    :param evaluation_df: The evaluation DataFrame.
+    :return: A dictionary containing the existing feedback.
+    """
+    return {
+        "Key Findings": evaluation_df["Key Findings"].iloc[-1] if not evaluation_df.empty else "",
+        "Interview Strengths": evaluation_df["Interview Strengths"].iloc[-1] if not evaluation_df.empty else "",
+        "Areas for Improvement": evaluation_df["Areas for Improvement"].iloc[-1] if not evaluation_df.empty else "",
+        "Recommended Follow-Up Questions": evaluation_df["Recommended Follow-Up Questions"].iloc[-1] if not evaluation_df.empty else "",
+    }
+
 # Initialize Flask App
 app = Flask(__name__)
 
@@ -262,14 +289,6 @@ def interview():
             timer = 0  # Reset timer
             duration = 0  # Reset duration
 
-        #if not resume:  # New session
-        #    timer_active = True
-        #    session['timer'] = 0  # Reset timer for new session
-        #    print("Starting a new session. Timer reset to 0.")
-        #else:  # Resuming session
-        #    timer_active = True  # Ensure timer continues running
-        #    print(f"Resuming session with timer at {timer} minutes.")
-
         # Render the interview screen
         return render_template(
             'interview.html',
@@ -316,6 +335,10 @@ def interview():
         print("Subcategories Before Processing:", subcategories)
 
         # Step 2: Generate Feedback for the Q&A Pair
+        # Retrieve existing cumulative feedback
+        existing_feedback = get_existing_feedback(evaluation_df)
+
+        # Construct the prompt
         prompt = (
             "You are a JTBD (Jobs-To-Be-Done) expert evaluator trained in the methodologies of Christensen, Moesta, and Klement. "
             "Your evaluation is based on the following principles:\n"
@@ -341,11 +364,17 @@ def interview():
             "       4. Strategic (actions, implications, priorities).\n"
             "\n"
             "2. Verbal Feedback:\n"
-            "   o For all completed Q&A pairs, summarize in four sections (no more than 5 points per section):\n"
+            "   o Summarize feedback in four sections, focusing only on the most critical points (maximum 10 per section):\n"
             "     • Key Findings\n"
             "     • Interview Strengths\n"
             "     • Areas for Improvement\n"
             "     • Recommended Follow-up Questions\n"
+            "\n"
+            "Current Cumulative Feedback:\n"
+            f"Key Findings: {existing_feedback['Key Findings']}\n"
+            f"Interview Strengths: {existing_feedback['Interview Strengths']}\n"
+            f"Areas for Improvement: {existing_feedback['Areas for Improvement']}\n"
+            f"Recommended Follow-Up Questions: {existing_feedback['Recommended Follow-Up Questions']}\n"
             "\n"
             "Expected Output Format (strict JSON):\n"
             "{\n"
@@ -364,14 +393,12 @@ def interview():
             "    }\n"
             "  },\n"
             "  \"verbal_feedback\": {\n"
-            "    \"Key Findings\": [\"Point 1\", \"Point 2\"],\n"
-            "    \"Interview Strengths\": [\"Strength 1\", \"Strength 2\"],\n"
-            "    \"Areas for Improvement\": [\"Improvement 1\", \"Improvement 2\"],\n"
-            "    \"Recommended Follow-Up Questions\": [\"Question 1\", \"Question 2\"]\n"
+            "    \"Key Findings\": [\"Critical point 1\", \"Critical point 2\", ...],\n"
+            "    \"Interview Strengths\": [\"Critical point 1\", \"Critical point 2\", ...],\n"
+            "    \"Areas for Improvement\": [\"Critical point 1\", \"Critical point 2\", ...],\n"
+            "    \"Recommended Follow-Up Questions\": [\"Critical point 1\", \"Critical point 2\", ...]\n"
             "  }\n"
             "}\n"
-            "\n"
-            "Focus on clarity, conciseness, and actionable insights."
             f"\n\nQ&A Pair:\nUser's Question: {user_input}\nPersona's Answer: {persona_answer}"
         )
 
@@ -391,13 +418,25 @@ def interview():
                     raw_scores[f"R - {sub}"] = scores["relevance"]
                     raw_scores[f"E - {sub}"] = scores["effectiveness"]
 
-            # Extract verbal feedback
+            # Extract new verbal feedback
             verbal_feedback = feedback_data['verbal_feedback']
-            key_findings = "; ".join(verbal_feedback.get("Key Findings", []))
-            strengths = "; ".join(verbal_feedback.get("Interview Strengths", []))
-            improvements = "; ".join(verbal_feedback.get("Areas for Improvement", []))
-            follow_up_questions = "; ".join(verbal_feedback.get("Recommended Follow-Up Questions", []))
+            new_key_findings = verbal_feedback.get("Key Findings", [])
+            new_strengths = verbal_feedback.get("Interview Strengths", [])
+            new_improvements = verbal_feedback.get("Areas for Improvement", [])
+            new_follow_up_questions = verbal_feedback.get("Recommended Follow-Up Questions", [])
 
+            # Retrieve existing cumulative feedback
+            existing_feedback = get_existing_feedback(evaluation_df)
+
+            # Merge and limit feedback for each section
+            key_findings = merge_and_limit_feedback(existing_feedback["Key Findings"], new_key_findings, max_points=10)
+            strengths = merge_and_limit_feedback(existing_feedback["Interview Strengths"], new_strengths, max_points=10)
+            improvements = merge_and_limit_feedback(existing_feedback["Areas for Improvement"], new_improvements,
+                                                    max_points=10)
+            follow_up_questions = merge_and_limit_feedback(existing_feedback["Recommended Follow-Up Questions"],
+                                                           new_follow_up_questions, max_points=10)
+
+            # Append to DataFrame
             new_row = {
                 "Timestamp": pd.Timestamp.now(),
                 "Q&A #": questions_counter,
@@ -409,7 +448,7 @@ def interview():
             }
             evaluation_df = pd.concat([evaluation_df, pd.DataFrame([new_row])], ignore_index=True)
             print("Evaluation DataFrame after appending new row:")
-            print(evaluation_df.info())
+            #print(evaluation_df.info())
 
             # Normalize subcategories dictionary
             normalized_subcategories = {
